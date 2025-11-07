@@ -6,6 +6,10 @@ A comprehensive Model Context Protocol (MCP) server for BigCommerce REST API int
 - 👥 **Customer Management**: Retrieve and filter customers with comprehensive search options  
 - 📦 **Order Management**: Access orders with customer-product relationship capabilities
 
+<a href="https://glama.ai/mcp/servers/@isaacgounton/bigcommerce-api-mcp">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/@isaacgounton/bigcommerce-api-mcp/badge" alt="BigCommerce API Server MCP server" />
+</a>
+
 ## ✨ Features
 
 - ✅ MCP-compatible server with built-in tool discovery
@@ -101,7 +105,7 @@ realpath mcpServer.js
 
 **Step 3**: Restart Claude Desktop. Look for a green circle next to "bigcommerce" in the MCP section.
 
-### � Cline (VS Code Extension)
+### 🔌 Cline (VS Code Extension)
 
 **Step 1**: Install the Cline extension in VS Code
 
