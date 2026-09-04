@@ -1,304 +1,207 @@
 # BigCommerce MCP Server
 
-A comprehensive Model Context Protocol (MCP) server for BigCommerce REST API integration. This server provides AI assistants with the ability to interact with BigCommerce stores through three powerful tools:
+A Model Context Protocol (MCP) server for the BigCommerce REST API. It gives an
+AI assistant read access to your catalog, customers and orders — and, when you
+explicitly turn it on, the ability to change them.
 
-- 🛍️ **Products Management**: Get all products with advanced filtering
-- 👥 **Customer Management**: Retrieve and filter customers with comprehensive search options  
-- 📦 **Order Management**: Access orders with customer-product relationship capabilities
+## Tools
 
-## ✨ Features
+**Read (always available)**
 
-- ✅ MCP-compatible server with built-in tool discovery
-- ✅ Enhanced filtering capabilities on all endpoints
-- ✅ Customer-product association through order history
-- ✅ Comprehensive error handling and validation
-- ✅ Docker support for production deployment
-- ✅ Compatible with Claude Desktop, Cline, and other MCP clients
+| Tool | What it does |
+| --- | --- |
+| `get_all_products` | List products with filtering, sorting and pagination |
+| `get_product` | Fetch one product by ID, optionally with variants and images |
+| `get_all_customers` | List customers by ID, email, name, company or date range |
+| `get_all_orders` | List orders by customer, status, date range or total |
+| `get_order` | Fetch one order by ID |
+| `get_order_products` | List an order's line items — what was actually bought |
+| `list_categories` | Resolve category names to the IDs the product filters need |
+| `list_brands` | Resolve brand names to the IDs the product filters need |
 
-## 🚦 Getting Started
+**Write (requires `BIGCOMMERCE_ENABLE_WRITES=true`)**
 
-### ⚙️ Prerequisites
+| Tool | What it does |
+| --- | --- |
+| `create_product` | Create a catalog product |
+| `update_product` | Update a product's price, stock, visibility, categories… |
+| `create_customer` | Create a customer record |
+| `update_customer` | Update a customer's details |
+| `update_order` | Change an order's status, staff notes or customer message |
 
-- [Node.js (v18+ required, v20+ recommended)](https://nodejs.org/)
-- [npm](https://www.npmjs.com/) (included with Node)
-- BigCommerce store with API credentials
+Write tools are **not registered at all** unless you enable them, so a default
+deployment cannot modify your store even if someone reaches its endpoint.
+Enabling them also requires modify scopes on your BigCommerce API account.
 
-### 📥 Installation & Setup
+To see the tools and their parameters as configured:
 
-**1. Clone and install dependencies**
+```sh
+npm run list-tools
+```
+
+## Getting started
+
+### Prerequisites
+
+- Node.js v20 or later
+- A BigCommerce store with API credentials
+
+### Install
 
 ```sh
 git clone https://github.com/isaacgounton/bigcommerce-api-mcp.git
 cd bigcommerce-api-mcp
 npm install
+cp .env.example .env
 ```
 
-**2. Configure your BigCommerce credentials**
+### Configure
 
-Create a `.env` file in the project root:
+Fill in `.env`. At minimum:
 
 ```env
 BIGCOMMERCE_STORE_HASH=your_store_hash_here
 BIGCOMMERCE_API_KEY=your_api_key_here
 ```
 
-**How to get your BigCommerce credentials:**
-1. Go to your BigCommerce admin panel
-2. Navigate to **Advanced Settings** > **API Accounts** 
-3. Create a new API account with the following scopes:
-   - **Products**: Read-only or Modify
-   - **Orders**: Read-only or Modify  
-   - **Customers**: Read-only or Modify
-4. Copy the **Store Hash** and **Access Token** to your `.env` file
+To get these: BigCommerce admin → **Settings** → **API accounts** → **Create
+API account**. Grant the scopes you need (Products, Orders, Customers — read
+only unless you plan to enable writes), then copy the **Store Hash** and
+**Access Token**.
 
-### 🔧 Available Tools
+See `.env.example` for every supported variable.
 
-**`get_all_products`**
-- Retrieve products from your BigCommerce store
-- Parameters: `store_Hash` (required)
+## Transports
 
-**`get_all_customers`** 
-- Search and filter customers with advanced options
-- Parameters: `store_Hash` (required)
-- Optional filters: `email`, `name`, `company`, `phone`, `customer_group_id`, `limit`, `page`, `date_created`, `date_modified`
-
-**`get_all_orders`**
-- Access orders with customer-product relationship data
-- Parameters: `store_Hash` (required) 
-- Optional filters: `customer_id`, `email`, `status_id`, `min_id`, `max_id`, `limit`, `page`
-- ✨ **Special feature**: Filter by `customer_id` to see all products associated with a specific customer
-
-## 🔗 Client Integration
-
-### 💬 Claude Desktop
-
-**Step 1**: Get the absolute paths to node and mcpServer.js:
+### stdio (default) — for Claude Desktop, Cline and local clients
 
 ```sh
-which node
-# Example output: /usr/bin/node
-
-realpath mcpServer.js  
-# Example output: /home/user/bigcommerce-api-mcp/mcpServer.js
+npm start
 ```
 
-**Step 2**: Open Claude Desktop → **Settings** → **Developer** → **Edit Config** and add:
+### Streamable HTTP — for remote clients and agent runtimes
+
+```sh
+npm run start:http
+```
+
+Serves `POST /mcp`, plus unauthenticated `GET /health` and `GET /info`.
+
+> The SSE transport was removed in favour of Streamable HTTP, which replaced it
+> in the MCP specification. Point any client still using `/sse` at `/mcp`.
+
+## Client integration
+
+### Claude Desktop
+
+Find your absolute node path with `which node`, then edit
+`claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
     "bigcommerce": {
-      "command": "/usr/bin/node",
-      "args": ["/absolute/path/to/your/mcpServer.js"],
+      "command": "/absolute/path/to/node",
+      "args": ["/absolute/path/to/bigcommerce-api-mcp/mcpServer.js"],
       "env": {
-        "BIGCOMMERCE_STORE_HASH": "your_store_hash_here",
-        "BIGCOMMERCE_API_KEY": "your_api_key_here"
+        "BIGCOMMERCE_STORE_HASH": "your_store_hash",
+        "BIGCOMMERCE_API_KEY": "your_api_key"
       }
     }
   }
 }
 ```
 
-**Step 3**: Restart Claude Desktop. Look for a green circle next to "bigcommerce" in the MCP section.
+Restart Claude Desktop afterwards.
 
-### � Cline (VS Code Extension)
+### Remote clients over HTTP
 
-**Step 1**: Install the Cline extension in VS Code
-
-**Step 2**: Open VS Code settings and search for "Cline MCP"
-
-**Step 3**: Add your MCP server configuration:
-
-```json
-{
-  "cline.mcp.servers": {
-    "bigcommerce": {
-      "command": "node",
-      "args": ["/absolute/path/to/mcpServer.js"],
-      "env": {
-        "BIGCOMMERCE_STORE_HASH": "your_store_hash_here", 
-        "BIGCOMMERCE_API_KEY": "your_api_key_here"
-      }
-    }
-  }
-}
+```sh
+curl -X POST http://127.0.0.1:3000/mcp \
+  -H "Authorization: Bearer $MCP_AUTH_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```
 
-### 🤖 Other MCP Clients
+## Security
 
-For any MCP-compatible client, use these connection details:
+The HTTP transport is only as safe as how you deploy it. Anyone who can call
+`/mcp` acts with your store's API credentials.
 
-- **Command**: `node`
-- **Args**: `["/path/to/mcpServer.js"]`
-- **Environment Variables**: 
-  - `BIGCOMMERCE_STORE_HASH`
-  - `BIGCOMMERCE_API_KEY`
+- **Bind address.** The server listens on `127.0.0.1` by default. Set
+  `HOST=0.0.0.0` only when you intend to expose it, and put it behind a proxy
+  or firewall when you do.
+- **Bearer token.** Set `MCP_AUTH_TOKEN` and every `/mcp` request must carry
+  `Authorization: Bearer <token>`. Comparison is timing-safe. Set this
+  whenever the server is reachable beyond localhost.
+- **Browser origins.** Requests carrying an `Origin` header are refused unless
+  that origin is listed in `ALLOWED_ORIGINS`. This blocks DNS-rebinding
+  attacks, where a page the operator visits drives a localhost MCP server.
+  Non-browser clients send no `Origin` and are unaffected.
+- **Writes.** Off unless `BIGCOMMERCE_ENABLE_WRITES=true`. Leave it off if the
+  assistant only needs to read.
+- **Scopes.** Give the API account the narrowest scopes that work. A read-only
+  token cannot be turned into a write token by a bug in this server.
 
-## 🐳 Docker Deployment
-
-### Quick Start
-
-**1. Build the Docker image:**
+## Docker
 
 ```sh
 docker build -t bigcommerce-mcp .
+docker run --rm -p 3000:3000 --env-file .env bigcommerce-mcp
 ```
 
-**2. Run with environment variables:**
+The image sets `HOST=0.0.0.0` so the published port is reachable. Set
+`MCP_AUTH_TOKEN` in your `.env` before exposing the container.
+
+## Development
 
 ```sh
-docker run -i --rm \
-  -e BIGCOMMERCE_STORE_HASH=your_store_hash \
-  -e BIGCOMMERCE_API_KEY=your_api_key \
-  bigcommerce-mcp
+npm test          # protocol, auth, origin and discovery tests — no credentials needed
+npm run test:live # smoke-test every read tool against a real store (needs .env)
+npm run list-tools
 ```
 
-### Claude Desktop with Docker
+### Adding a tool
 
-Update your Claude Desktop config to use Docker:
+Drop a file under `tools/bigcommerce/<group>/`; it is discovered automatically.
 
-```json
-{
-  "mcpServers": {
-    "bigcommerce": {
-      "command": "docker",
-      "args": [
-        "run", "-i", "--rm", 
-        "-e", "BIGCOMMERCE_STORE_HASH=your_store_hash",
-        "-e", "BIGCOMMERCE_API_KEY=your_api_key", 
-        "bigcommerce-mcp"
-      ]
-    }
-  }
-}
+```js
+import { request } from "../../../lib/bigcommerce.js";
+
+const executeFunction = async ({ store_Hash, ...query } = {}) =>
+  request({ path: "v3/catalog/summary", query, storeHash: store_Hash });
+
+const apiTool = {
+  writes: false, // set true for anything that mutates the store
+  function: executeFunction,
+  definition: {
+    type: "function",
+    function: {
+      name: "catalog_summary",
+      description: "Get aggregate catalog counts.",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+  },
+};
+
+export { apiTool };
 ```
 
-### Docker Compose (Production)
+`lib/bigcommerce.js` handles credentials, query building, error shaping and
+JSON parsing, so a tool is usually just a path and a schema.
 
-Create a `docker-compose.yml`:
+## Project layout
 
-```yaml
-version: '3.8'
-services:
-  bigcommerce-mcp:
-    build: .
-    environment:
-      - BIGCOMMERCE_STORE_HASH=${BIGCOMMERCE_STORE_HASH}
-      - BIGCOMMERCE_API_KEY=${BIGCOMMERCE_API_KEY}
-    restart: unless-stopped
+```
+mcpServer.js            MCP server: stdio and streamable-http transports
+index.js                CLI entry point
+lib/bigcommerce.js      Shared REST client
+lib/tools.js            Tool discovery and write gating
+tools/bigcommerce/      Tool definitions, grouped by resource
+test/server.test.js     Test suite
 ```
 
-Then run:
+## License
 
-```sh
-docker-compose up -d
-```
-
-## 🧪 Testing
-
-### Local Testing
-
-Test the server locally to ensure it's working:
-
-```sh
-# Test tool discovery
-echo '{"jsonrpc":"2.0","method":"tools/list","params":{},"id":1}' | node mcpServer.js
-
-# Test a tool call  
-echo '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"get_all_products","arguments":{"store_Hash":"your_store_hash"}},"id":2}' | node mcpServer.js
-```
-
-### Postman Integration (Optional)
-
-You can also test with Postman Desktop:
-
-1. Download [Postman Desktop](https://www.postman.com/downloads/)
-2. Create a new MCP request with type `STDIO`
-3. Set command to: `node /absolute/path/to/mcpServer.js`
-4. Test your tools before connecting to AI clients
-
-## 🛠️ Advanced Usage
-
-### Server Modes
-
-**Standard stdio mode (default):**
-```sh
-node mcpServer.js
-```
-
-**HTTP mode with Server-Sent Events:**
-```sh  
-node mcpServer.js --sse
-```
-
-**Streamable HTTP mode:**
-```sh
-node mcpServer.js --streamable-http
-```
-
-### Environment Variables
-
-All BigCommerce credentials can be provided via environment variables:
-
-```bash
-export BIGCOMMERCE_STORE_HASH="your_store_hash"
-export BIGCOMMERCE_API_KEY="your_api_key" 
-node mcpServer.js
-```
-
-## 🔍 Tool Examples
-
-### Find products associated with a customer
-
-```javascript
-// Use get_all_orders with customer_id filter
-{
-  "name": "get_all_orders", 
-  "arguments": {
-    "store_Hash": "your_store_hash",
-    "customer_id": "3"
-  }
-}
-```
-
-### Search customers by email
-
-```javascript
-// Use get_all_customers with email filter
-{
-  "name": "get_all_customers",
-  "arguments": {
-    "store_Hash": "your_store_hash", 
-    "email": "customer@example.com"
-  }
-}
-```
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## 📄 License
-
-This project is licensed under the MIT License.
-
-## 🆘 Support & Questions
-
-- 🐛 **Issues**: [GitHub Issues](https://github.com/isaacgounton/bigcommerce-api-mcp/issues)
-- 💬 **Discussions**: [GitHub Discussions](https://github.com/isaacgounton/bigcommerce-api-mcp/discussions)
-- 📖 **MCP Documentation**: [Model Context Protocol](https://modelcontextprotocol.io/)
-- 🏪 **BigCommerce API Docs**: [BigCommerce API Reference](https://developer.bigcommerce.com/docs/rest-management)
-
-## 🚀 What's Next?
-
-This MCP server provides a solid foundation for BigCommerce integration. Possible enhancements include:
-
-- Additional BigCommerce API endpoints (categories, brands, etc.)
-- Webhook support for real-time updates
-- Advanced filtering and search capabilities
-- Multi-store support
-- Product modification tools (create/update/delete)
-
----
-
-**Built with ❤️ for the MCP community**
+MIT

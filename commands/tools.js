@@ -1,4 +1,5 @@
 import { discoverTools } from "../lib/tools.js";
+import { writesEnabled } from "../lib/bigcommerce.js";
 
 export function registerToolsCommand(program) {
   program
@@ -7,59 +8,39 @@ export function registerToolsCommand(program) {
     .action(async () => {
       const tools = await discoverTools();
       if (tools.length === 0) {
-        console.log("No tools found. Tools should be organized as:");
-        console.log("tools/workspace/collection/request.js\n");
+        console.log("No tools found under tools/<workspace>/<group>/<tool>.js");
         return;
       }
 
-      console.log("\nAvailable Tools:\n");
+      // path is "<workspace>/<group>/<file>.js"; group the listing by <group>.
+      const groups = {};
+      for (const tool of tools) {
+        const group = tool.path.split("/").at(-2) ?? "ungrouped";
+        (groups[group] ??= []).push(tool);
+      }
 
-      // Group tools by workspace/collection
-      const groupedTools = tools.reduce((acc, tool) => {
-        // Extract workspace and collection from path
-        const parts = tool.path.split("/");
-        const workspace = parts[1] || "Unknown Workspace";
-        const collection = parts[2] || "Unknown Collection";
-
-        if (!acc[workspace]) acc[workspace] = {};
-        if (!acc[workspace][collection]) acc[workspace][collection] = [];
-
-        acc[workspace][collection].push(tool);
-        return acc;
-      }, {});
-
-      // Print tools in a hierarchical structure
-      for (const [workspace, collections] of Object.entries(groupedTools)) {
-        console.log(`Workspace: ${workspace}`);
-        for (const [collection, tools] of Object.entries(collections)) {
-          console.log(`  Collection: ${collection}`);
-          tools.forEach(
-            ({
-              definition: {
-                function: { name, description, parameters },
-              },
-            }) => {
-              console.log(`    ${name}`);
-              console.log(
-                `      Description: ${description || "No description provided"}`
-              );
-              if (parameters?.properties) {
-                console.log("      Parameters:");
-                Object.entries(parameters.properties).forEach(
-                  ([name, details]) => {
-                    console.log(
-                      `        - ${name}: ${
-                        details.description || "No description"
-                      }`
-                    );
-                  }
-                );
-              }
-              console.log("");
-            }
-          );
+      console.log(`\n${tools.length} tools available:\n`);
+      for (const [group, groupTools] of Object.entries(groups).sort()) {
+        console.log(`${group}`);
+        for (const { definition, writes } of groupTools) {
+          const { name, description, parameters } = definition.function;
+          console.log(`  ${name}${writes ? "  [write]" : ""}`);
+          console.log(`    ${description}`);
+          const required = parameters?.required ?? [];
+          const params = Object.keys(parameters?.properties ?? {});
+          if (params.length) {
+            console.log(
+              `    params: ${params
+                .map((p) => (required.includes(p) ? `${p}*` : p))
+                .join(", ")}`
+            );
+          }
+          console.log("");
         }
-        console.log("");
+      }
+
+      if (!writesEnabled()) {
+        console.log("Write tools are hidden. Set BIGCOMMERCE_ENABLE_WRITES=true to expose them.\n");
       }
     });
 }

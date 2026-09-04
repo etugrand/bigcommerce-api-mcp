@@ -201,17 +201,17 @@ async function testAgnoCompatibility() {
             console.log(`\n📋 Testing tool: ${tool.name}`);
             console.log(`   Description: ${tool.description}`);
 
-            try {
-                let testArgs = {};
+            // Tools needing an id (get_product, update_order, ...) have nothing
+            // safe to guess against a live store, so they are left alone.
+            const required = tool.inputSchema?.required ?? [];
+            if (required.length > 0) {
+                console.log(`   \u23ed\ufe0f  Skipped: needs ${required.join(', ')}`);
+                continue;
+            }
 
-                // Add tool-specific test arguments
-                if (tool.name === 'get_all_products') {
-                    testArgs = { limit: 5 }; // Small limit for testing
-                } else if (tool.name === 'get_all_customers') {
-                    testArgs = { limit: 5 }; // Small limit for testing
-                } else if (tool.name === 'get_all_orders') {
-                    testArgs = { limit: 5 }; // Small limit for testing
-                }
+            try {
+                // Keep live responses small; every listing tool accepts limit.
+                const testArgs = { limit: 5 };
 
                 const result = await mcpTools.callTool(tool.name, testArgs);
 
@@ -220,7 +220,12 @@ async function testAgnoCompatibility() {
                     const resultText = result.content[0].text;
                     console.log(`   📊 Result preview: ${resultText.substring(0, 200)}${resultText.length > 200 ? '...' : ''}`);
                 }
+                console.log(`   📦 structuredContent: ${result?.structuredContent ? 'present' : 'absent'}`);
 
+                if (result?.isError) {
+                    console.log(`   ❌ Tool returned an error`);
+                    continue;
+                }
                 console.log(`   ✅ Tool test passed`);
             } catch (error) {
                 console.log(`   ❌ Tool test failed: ${error.message}`);

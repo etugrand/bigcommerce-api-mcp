@@ -1,19 +1,22 @@
-FROM node:22.12-alpine AS builder
+FROM node:22-alpine
 
 WORKDIR /app
+
 COPY package.json package-lock.json ./
-RUN npm install
+RUN npm ci --omit=dev
 
 COPY . .
 
-# Listen on all interfaces inside the container (app defaults to 127.0.0.1)
+# The app binds to 127.0.0.1 by default; inside a container it must listen
+# on all interfaces for published ports to reach it.
 ENV HOST=0.0.0.0
+ENV PORT=3000
 
-# Install curl for health check
-RUN apk --no-cache add curl
+RUN apk add --no-cache curl
+USER node
 
-# Add health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:3000/health || exit 1
+  CMD curl -f http://127.0.0.1:3000/health || exit 1
 
+EXPOSE 3000
 ENTRYPOINT ["node", "mcpServer.js", "--streamable-http"]

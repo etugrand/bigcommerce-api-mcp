@@ -2,9 +2,10 @@
 
 import dotenv from "dotenv";
 import express from "express";
+import { timingSafeEqual } from "crypto";
+import { readFileSync } from "fs";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   CallToolRequestSchema,
@@ -13,34 +14,43 @@ import {
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
 import { discoverTools } from "./lib/tools.js";
+import { writesEnabled } from "./lib/bigcommerce.js";
 
 import path from "path";
 import { fileURLToPath } from "url";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-dotenv.config({ path: path.resolve(__dirname, ".env") });
+dotenv.config({ path: path.resolve(__dirname, ".env"), quiet: true });
 
 const SERVER_NAME = "bigcommerce-api-mcp";
+const SERVER_VERSION = JSON.parse(
+  readFileSync(path.resolve(__dirname, "package.json"), "utf8")
+).version;
 
-async function transformTools(tools) {
-  return tools
-    .map((tool) => {
-      const definitionFunction = tool.definition?.function;
-      if (!definitionFunction) return;
-      return {
-        name: definitionFunction.name,
-        description: definitionFunction.description,
-        inputSchema: definitionFunction.parameters,
-      };
-    })
-    .filter(Boolean);
+// stdio mode speaks JSON-RPC over stdout, so all logging goes to stderr.
+const log = (...args) => console.error(...args);
+
+function createServer() {
+  const server = new Server(
+    { name: SERVER_NAME, version: SERVER_VERSION },
+    { capabilities: { tools: {} } }
+  );
+  server.onerror = (error) => log("[Error]", error);
+  return server;
+}
+
+function transformTools(tools) {
+  return tools.map(({ definition }) => ({
+    name: definition.function.name,
+    description: definition.function.description,
+    inputSchema: definition.function.parameters,
+  }));
 }
 
 async function setupServerHandlers(server, tools) {
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: await transformTools(tools),
+    tools: transformTools(tools),
   }));
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -49,169 +59,137 @@ async function setupServerHandlers(server, tools) {
     if (!tool) {
       throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${toolName}`);
     }
-    const args = request.params.arguments;
-    const requiredParameters =
-      tool.definition?.function?.parameters?.required || [];
-    for (const requiredParameter of requiredParameters) {
-      if (!(requiredParameter in args)) {
+
+    const args = request.params.arguments ?? {};
+    const required = tool.definition.function.parameters?.required ?? [];
+    for (const parameter of required) {
+      if (!(parameter in args)) {
         throw new McpError(
           ErrorCode.InvalidParams,
-          `Missing required parameter: ${requiredParameter}`
+          `Missing required parameter: ${parameter}`
         );
       }
     }
+
+    let result;
     try {
-      const result = await tool.function(args);
-
-      // Format response for better Agno compatibility
-      // Check if result has error property and handle accordingly
-      if (result && typeof result === 'object' && result.error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error: ${result.error}`,
-            },
-          ],
-          isError: true,
-        };
-      }
-
-      // For successful results, provide both raw data and formatted text
-      // This approach ensures compatibility with different MCP clients
-      let formattedResult;
-      if (typeof result === 'string') {
-        formattedResult = result;
-      } else if (typeof result === 'object' && result !== null) {
-        // For objects, provide a more readable format for Agno
-        if (Array.isArray(result)) {
-          formattedResult = `Found ${result.length} items:\n${JSON.stringify(result, null, 2)}`;
-        } else if (result.data && Array.isArray(result.data)) {
-          formattedResult = `Found ${result.data.length} items:\n${JSON.stringify(result, null, 2)}`;
-        } else {
-          formattedResult = JSON.stringify(result, null, 2);
-        }
-      } else {
-        formattedResult = String(result);
-      }
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: formattedResult,
-          },
-        ],
-        // Include metadata for advanced clients
-        _meta: {
-          toolName,
-          resultType: typeof result,
-          hasData: result && typeof result === 'object' && (result.data || Array.isArray(result)),
-          timestamp: new Date().toISOString(),
-        },
-      };
+      result = await tool.function(args);
     } catch (error) {
-      console.error("[Error] Failed to fetch data:", error);
-      throw new McpError(
-        ErrorCode.InternalError,
-        `API error: ${error.message}`
-      );
+      log("[Error] Tool threw:", error);
+      throw new McpError(ErrorCode.InternalError, `API error: ${error.message}`);
     }
+
+    if (result?.error) {
+      return {
+        content: [{ type: "text", text: `Error: ${result.error}` }],
+        isError: true,
+      };
+    }
+
+    // structuredContent must be an object; V2 endpoints return bare arrays.
+    const structured = Array.isArray(result) ? { data: result } : result;
+
+    return {
+      // Text stays alongside structuredContent for clients that ignore it.
+      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      structuredContent: structured,
+    };
   });
 }
 
-// Authentication middleware
+/** Rejects requests without a valid bearer token, when a token is configured. */
 function authenticateRequest(req, res, next) {
-  const authHeader = req.headers.authorization;
   const expectedToken = process.env.MCP_AUTH_TOKEN;
+  if (!expectedToken) return next();
 
-  // Skip auth if no token is configured
-  if (!expectedToken) {
-    return next();
+  const unauthorized = (message) =>
+    res.status(401).json({
+      jsonrpc: "2.0",
+      error: { code: -32001, message: `Unauthorized: ${message}` },
+      id: null,
+    });
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith("Bearer ")) {
+    return unauthorized("missing or invalid authorization header");
   }
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({
+  const provided = Buffer.from(authHeader.slice(7));
+  const expected = Buffer.from(expectedToken);
+  const valid =
+    provided.length === expected.length && timingSafeEqual(provided, expected);
+
+  return valid ? next() : unauthorized("invalid token");
+}
+
+/**
+ * Blocks cross-origin browser requests, which the MCP spec requires for local
+ * HTTP servers: without it any website the operator visits can drive this
+ * server through the browser (DNS rebinding).
+ */
+function originGuard(req, res, next) {
+  const allowed = (process.env.ALLOWED_ORIGINS ?? "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  const origin = req.headers.origin;
+
+  // No Origin header means a non-browser client (Claude Desktop, curl, agents).
+  if (!origin) return next();
+
+  if (!allowed.includes(origin)) {
+    return res.status(403).json({
       jsonrpc: "2.0",
       error: {
-        code: -32001,
-        message: "Unauthorized: Missing or invalid authorization header"
+        code: -32003,
+        message: `Forbidden: origin ${origin} is not in ALLOWED_ORIGINS`,
       },
-      id: null
+      id: null,
     });
   }
 
-  const token = authHeader.substring(7);
-  if (token !== expectedToken) {
-    return res.status(401).json({
-      jsonrpc: "2.0",
-      error: {
-        code: -32001,
-        message: "Unauthorized: Invalid token"
-      },
-      id: null
-    });
-  }
-
-  next();
+  res.header("Access-Control-Allow-Origin", origin);
+  res.header("Vary", "Origin");
+  res.header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Accept, Authorization, Mcp-Session-Id, MCP-Protocol-Version"
+  );
+  return req.method === "OPTIONS" ? res.sendStatus(204) : next();
 }
 
 async function setupStreamableHttp(tools) {
   const app = express();
   app.use(express.json());
+  app.use(originGuard);
 
-  // Add CORS middleware for better compatibility with web clients
-  app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Mcp-Session-Id');
+  const info = {
+    name: SERVER_NAME,
+    version: SERVER_VERSION,
+    capabilities: { tools: {} },
+    transport: "streamable-http",
+    tools: tools.length,
+    writesEnabled: writesEnabled(),
+  };
 
-    if (req.method === 'OPTIONS') {
-      res.sendStatus(200);
-    } else {
-      next();
-    }
-  });
+  app.get("/health", (_req, res) =>
+    res.json({ status: "healthy", ...info, timestamp: new Date().toISOString() })
+  );
 
-  app.get('/health', (req, res) => {
-    res.status(200).json({
-      status: 'healthy',
-      server: SERVER_NAME,
-      version: '0.1.0',
-      capabilities: ['tools'],
-      timestamp: new Date().toISOString(),
-    });
-  });
-
-  // Add info endpoint for better discoverability
-  app.get('/info', (req, res) => {
-    res.status(200).json({
-      name: SERVER_NAME,
-      version: '0.1.0',
-      description: 'BigCommerce API MCP server with tools for products, customers, and orders',
-      capabilities: {
-        tools: {},
-      },
-      supportedTransports: ['stdio', 'sse', 'streamable-http'],
-    });
-  });
+  app.get("/info", (_req, res) =>
+    res.json({
+      ...info,
+      description:
+        "BigCommerce API MCP server with tools for products, customers and orders",
+    })
+  );
 
   app.post("/mcp", authenticateRequest, async (req, res) => {
     try {
-      const server = new Server(
-        {
-          name: SERVER_NAME,
-          version: "0.1.0",
-        },
-        {
-          capabilities: {
-            tools: {},
-          },
-        }
-      );
-      server.onerror = (error) => console.error("[Error]", error);
+      const server = createServer();
       await setupServerHandlers(server, tools);
 
+      // Stateless: one server and transport per request, torn down on close.
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
       });
@@ -224,14 +202,11 @@ async function setupStreamableHttp(tools) {
       await server.connect(transport);
       await transport.handleRequest(req, res, req.body);
     } catch (error) {
-      console.error("Error handling MCP request:", error);
+      log("[Error] Failed to handle MCP request:", error);
       if (!res.headersSent) {
         res.status(500).json({
           jsonrpc: "2.0",
-          error: {
-            code: -32603,
-            message: "Internal server error",
-          },
+          error: { code: -32603, message: "Internal server error" },
           id: null,
         });
       }
@@ -241,108 +216,13 @@ async function setupStreamableHttp(tools) {
   const port = process.env.PORT || 3000;
   const host = process.env.HOST || "127.0.0.1";
   app.listen(port, host, () => {
-    console.log(
-      `[Streamable HTTP Server] running at http://${host}:${port}/mcp`
-    );
-    console.log(`[Health Check] available at http://${host}:${port}/health`);
-    console.log(`[Server Info] available at http://${host}:${port}/info`);
-  });
-}
-
-async function setupSSE(tools) {
-  const app = express();
-  const transports = {};
-  const servers = {};
-
-  // Add CORS middleware for better compatibility with web clients
-  app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', '*');
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Cache-Control');
-
-    if (req.method === 'OPTIONS') {
-      res.sendStatus(200);
-    } else {
-      next();
-    }
-  });
-
-  app.get("/sse", authenticateRequest, async (_req, res) => {
-    const server = new Server(
-      {
-        name: SERVER_NAME,
-        version: "0.1.0",
-      },
-      {
-        capabilities: {
-          tools: {},
-        },
-      }
-    );
-    server.onerror = (error) => console.error("[Error]", error);
-    await setupServerHandlers(server, tools);
-
-    const transport = new SSEServerTransport("/messages", res);
-    transports[transport.sessionId] = transport;
-    servers[transport.sessionId] = server;
-
-    res.on("close", async () => {
-      delete transports[transport.sessionId];
-      await server.close();
-      delete servers[transport.sessionId];
-    });
-
-    await server.connect(transport);
-  });
-
-  app.post("/messages", authenticateRequest, async (req, res) => {
-    const sessionId = req.query.sessionId;
-    const transport = transports[sessionId];
-    const server = servers[sessionId];
-
-    if (transport && server) {
-      await transport.handlePostMessage(req, res);
-    } else {
-      res.status(400).send("No transport/server found for sessionId");
-    }
-  });
-
-  // Add health check endpoint
-  app.get('/health', (req, res) => {
-    res.status(200).json({
-      status: 'healthy',
-      server: SERVER_NAME,
-      version: '0.1.0',
-      transport: 'sse',
-      activeSessions: Object.keys(transports).length,
-      timestamp: new Date().toISOString(),
-    });
-  });
-
-  const port = process.env.PORT || 3000;
-  const host = process.env.HOST || "127.0.0.1";
-  app.listen(port, host, () => {
-    console.log(`[SSE Server] is running:`);
-    console.log(`  SSE stream:    http://${host}:${port}/sse`);
-    console.log(`  Message input: http://${host}:${port}/messages`);
-    console.log(`  Health Check:  http://${host}:${port}/health`);
+    log(`[Streamable HTTP] listening at http://${host}:${port}/mcp`);
+    log(`[Streamable HTTP] health at http://${host}:${port}/health`);
   });
 }
 
 async function setupStdio(tools) {
-  // stdio mode: single server instance
-  const server = new Server(
-    {
-      name: SERVER_NAME,
-      version: "0.1.0",
-    },
-    {
-      capabilities: {
-        tools: {},
-      },
-    }
-  );
-  server.onerror = (error) => console.error("[Error]", error);
+  const server = createServer();
   await setupServerHandlers(server, tools);
 
   process.on("SIGINT", async () => {
@@ -350,48 +230,24 @@ async function setupStdio(tools) {
     process.exit(0);
   });
 
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+  await server.connect(new StdioServerTransport());
 }
 
 async function run() {
-  const args = process.argv.slice(2);
-  const isStreamableHttp = args.includes("--streamable-http");
-  const isSSE = args.includes("--sse");
+  const useHttp = process.argv.slice(2).includes("--streamable-http");
 
   try {
     const tools = await discoverTools();
-    console.log(`[Server] Loaded ${tools.length} tools successfully`);
-
-    if (isStreamableHttp && isSSE) {
-      console.error("Error: Cannot specify both --streamable-http and --sse");
-      process.exit(1);
-    }
-
-    if (isStreamableHttp) {
-      await setupStreamableHttp(tools);
-    } else if (isSSE) {
-      await setupSSE(tools);
-    } else {
-      await setupStdio(tools);
-    }
+    log(
+      `[Server] loaded ${tools.length} tools (writes ${
+        writesEnabled() ? "enabled" : "disabled"
+      })`
+    );
+    await (useHttp ? setupStreamableHttp(tools) : setupStdio(tools));
   } catch (error) {
-    console.error("[Error] Failed to start server:", error.message);
-
-    // If in HTTP mode, still start the server with an empty tools array for health checks
-    if (isStreamableHttp || isSSE) {
-      console.log("[Server] Starting with limited functionality due to initialization error");
-      const tools = [];
-
-      if (isStreamableHttp) {
-        await setupStreamableHttp(tools);
-      } else if (isSSE) {
-        await setupSSE(tools);
-      }
-    } else {
-      process.exit(1);
-    }
+    log("[Error] Failed to start server:", error);
+    process.exit(1);
   }
 }
 
-run().catch(console.error);
+run();

@@ -8,17 +8,17 @@
     "list-tools": "node index.js tools",
     "start": "node mcpServer.js",
     "start:http": "node mcpServer.js --streamable-http",
-    "start:sse": "node mcpServer.js --sse",
-    "test:agno": "node test-agno-compatibility.js"
+    "test": "node --test test/",
+    "test:live": "node test-agno-compatibility.js"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.17.0",
-    "commander": "^13.1.0",
-    "dotenv": "^16.4.7",
-    "express": "^5.1.0"
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "commander": "^15.0.0",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1"
   },
   "engines": {
-    "node": ">=16.0.0"
+    "node": ">=20.0.0"
   },
   "keywords": [
     "bigcommerce",
@@ -29,6 +29,6 @@
     "products",
     "customers"
   ],
-  "author": "Developer",
+  "author": "Isaac Gounton",
   "license": "MIT"
 }
