@@ -239,12 +239,13 @@ async function setupStreamableHttp(tools) {
   });
 
   const port = process.env.PORT || 3000;
-  app.listen(port, () => {
+  const host = process.env.HOST || "127.0.0.1";
+  app.listen(port, host, () => {
     console.log(
-      `[Streamable HTTP Server] running at http://127.0.0.1:${port}/mcp`
+      `[Streamable HTTP Server] running at http://${host}:${port}/mcp`
     );
-    console.log(`[Health Check] available at http://127.0.0.1:${port}/health`);
-    console.log(`[Server Info] available at http://127.0.0.1:${port}/info`);
+    console.log(`[Health Check] available at http://${host}:${port}/health`);
+    console.log(`[Server Info] available at http://${host}:${port}/info`);
   });
 }
 
@@ -266,7 +267,7 @@ async function setupSSE(tools) {
     }
   });
 
-  app.get("/sse", async (_req, res) => {
+  app.get("/sse", authenticateRequest, async (_req, res) => {
     const server = new Server(
       {
         name: SERVER_NAME,
@@ -294,7 +295,7 @@ async function setupSSE(tools) {
     await server.connect(transport);
   });
 
-  app.post("/messages", async (req, res) => {
+  app.post("/messages", authenticateRequest, async (req, res) => {
     const sessionId = req.query.sessionId;
     const transport = transports[sessionId];
     const server = servers[sessionId];
@@ -319,11 +320,12 @@ async function setupSSE(tools) {
   });
 
   const port = process.env.PORT || 3000;
-  app.listen(port, () => {
+  const host = process.env.HOST || "127.0.0.1";
+  app.listen(port, host, () => {
     console.log(`[SSE Server] is running:`);
-    console.log(`  SSE stream:    http://127.0.0.1:${port}/sse`);
-    console.log(`  Message input: http://127.0.0.1:${port}/messages`);
-    console.log(`  Health Check:  http://127.0.0.1:${port}/health`);
+    console.log(`  SSE stream:    http://${host}:${port}/sse`);
+    console.log(`  Message input: http://${host}:${port}/messages`);
+    console.log(`  Health Check:  http://${host}:${port}/health`);
   });
 }
 

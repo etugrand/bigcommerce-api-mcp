@@ -6,6 +6,9 @@ RUN npm install
 
 COPY . .
 
+# Listen on all interfaces inside the container (app defaults to 127.0.0.1)
+ENV HOST=0.0.0.0
+
 # Install curl for health check
 RUN apk --no-cache add curl
 
