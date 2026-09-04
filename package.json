@@ -9,7 +9,8 @@
     "start": "node mcpServer.js",
     "start:http": "node mcpServer.js --streamable-http",
     "test": "node --test test/",
-    "test:live": "node test-agno-compatibility.js"
+    "test:live": "node test-agno-compatibility.js",
+    "sync-spec": "node scripts/sync-spec.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
@@ -30,5 +31,8 @@
     "customers"
   ],
   "author": "Isaac Gounton",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "yaml": "^2.9.0"
+  }
 }

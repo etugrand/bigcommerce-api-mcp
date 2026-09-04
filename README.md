@@ -127,9 +127,15 @@ The image sets `HOST=0.0.0.0` so the published port is reachable. Set
 ## Development
 
 ```sh
-npm test          # protocol, auth, origin and discovery tests — no credentials needed
-npm run test:live # smoke-test read tools against a real store (needs .env)
+npm test           # protocol, auth, origin, discovery and spec conformance — no credentials needed
+npm run test:live  # smoke-test read tools against a real store (needs .env)
+npm run sync-spec  # refresh the query-parameter fixture from BigCommerce's OpenAPI specs
 ```
+
+`npm test` checks every query parameter a tool declares against BigCommerce's
+published specs. This matters because BigCommerce **ignores unknown query
+parameters** rather than rejecting them — an invented filter silently returns
+unfiltered data, which is worse than an error.
 
 To add a tool, drop a file under `tools/bigcommerce/<group>/` exporting an
 `apiTool` — it's discovered automatically. `lib/bigcommerce.js` handles

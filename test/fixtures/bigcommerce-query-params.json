@@ -1,0 +1,197 @@
+{
+  "_comment": "Query parameters each endpoint accepts, extracted from BigCommerce's OpenAPI specs. BigCommerce ignores unknown query params silently, so a tool declaring one returns unfiltered data instead of an error. Regenerate with: npm run sync-spec",
+  "_source": "https://github.com/bigcommerce/api-specs",
+  "endpoints": {
+    "get_all_products": {
+      "spec": "reference/catalog/products_catalog.v3.yml",
+      "path": "GET /catalog/products",
+      "path_params": [],
+      "query_params": [
+        "availability",
+        "brand_id",
+        "categories",
+        "categories:in",
+        "condition",
+        "date_last_imported",
+        "date_last_imported:max",
+        "date_last_imported:min",
+        "date_modified",
+        "date_modified:max",
+        "date_modified:min",
+        "direction",
+        "exclude_fields",
+        "id",
+        "id:greater",
+        "id:in",
+        "id:less",
+        "id:max",
+        "id:min",
+        "id:not_in",
+        "include",
+        "include_fields",
+        "inventory_level",
+        "inventory_level:greater",
+        "inventory_level:in",
+        "inventory_level:less",
+        "inventory_level:max",
+        "inventory_level:min",
+        "inventory_level:not_in",
+        "inventory_low",
+        "is_featured",
+        "is_free_shipping",
+        "is_visible",
+        "keyword",
+        "keyword_context",
+        "limit",
+        "name",
+        "out_of_stock",
+        "page",
+        "price",
+        "sku",
+        "sku:in",
+        "sort",
+        "status",
+        "total_sold",
+        "type",
+        "upc",
+        "weight"
+      ]
+    },
+    "get_product": {
+      "spec": "reference/catalog/products_catalog.v3.yml",
+      "path": "GET /catalog/products/{product_id}",
+      "path_params": [
+        "product_id"
+      ],
+      "query_params": [
+        "exclude_fields",
+        "include",
+        "include_fields"
+      ]
+    },
+    "get_all_customers": {
+      "spec": "reference/customers.v3.yml",
+      "path": "GET /customers",
+      "path_params": [],
+      "query_params": [
+        "company:in",
+        "customer_group_id:in",
+        "date_created",
+        "date_created:max",
+        "date_created:min",
+        "date_modified",
+        "date_modified:max",
+        "date_modified:min",
+        "email:in",
+        "id:in",
+        "include",
+        "limit",
+        "name:in",
+        "name:like",
+        "page",
+        "registration_ip_address:in",
+        "sort"
+      ]
+    },
+    "get_all_orders": {
+      "spec": "reference/orders.v2.oas2.yml",
+      "path": "GET /orders",
+      "path_params": [],
+      "query_params": [
+        "cart_id",
+        "channel_id",
+        "customer_id",
+        "email",
+        "include",
+        "is_deleted",
+        "limit",
+        "max_date_created",
+        "max_date_modified",
+        "max_id",
+        "max_total",
+        "min_date_created",
+        "min_date_modified",
+        "min_id",
+        "min_total",
+        "page",
+        "payment_method",
+        "sort",
+        "status_id"
+      ]
+    },
+    "get_order": {
+      "spec": "reference/orders.v2.oas2.yml",
+      "path": "GET /orders/{order_id}",
+      "path_params": [
+        "order_id"
+      ],
+      "query_params": [
+        "include"
+      ]
+    },
+    "get_order_products": {
+      "spec": "reference/orders.v2.oas2.yml",
+      "path": "GET /orders/{order_id}/products",
+      "path_params": [
+        "order_id"
+      ],
+      "query_params": [
+        "limit",
+        "page"
+      ]
+    },
+    "list_categories": {
+      "spec": "reference/catalog/categories_catalog.v3.yml",
+      "path": "GET /catalog/categories",
+      "path_params": [],
+      "query_params": [
+        "exclude_fields",
+        "id",
+        "id:greater",
+        "id:in",
+        "id:less",
+        "id:max",
+        "id:min",
+        "id:not_in",
+        "include_fields",
+        "is_visible",
+        "keyword",
+        "limit",
+        "name",
+        "name:like",
+        "page",
+        "page_title",
+        "page_title:like",
+        "parent_id",
+        "parent_id:greater",
+        "parent_id:in",
+        "parent_id:less",
+        "parent_id:max",
+        "parent_id:min",
+        "sort"
+      ]
+    },
+    "list_brands": {
+      "spec": "reference/catalog/brands_catalog.v3.yml",
+      "path": "GET /catalog/brands",
+      "path_params": [],
+      "query_params": [
+        "exclude_fields",
+        "id",
+        "id:greater",
+        "id:in",
+        "id:less",
+        "id:max",
+        "id:min",
+        "id:not_in",
+        "include_fields",
+        "limit",
+        "name",
+        "name:like",
+        "page",
+        "page_title",
+        "sort"
+      ]
+    }
+  }
+}

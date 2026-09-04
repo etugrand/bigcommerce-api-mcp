@@ -42,9 +42,9 @@ const apiTool = {
             type: "string",
             description: "Comma-separated company names.",
           },
-          "phone:in": {
+          "registration_ip_address:in": {
             type: "string",
-            description: "Comma-separated phone numbers.",
+            description: "Comma-separated registration IP addresses.",
           },
           "customer_group_id:in": {
             type: "string",

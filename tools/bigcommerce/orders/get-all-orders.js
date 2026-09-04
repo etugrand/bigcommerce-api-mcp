@@ -58,9 +58,9 @@ const apiTool = {
             description: "Filter by payment method, e.g. credit_card, paypal.",
           },
           cart_id: { type: "string", description: "Filter by cart ID." },
-          external_order_id: {
+          include: {
             type: "string",
-            description: "Filter by external order ID.",
+            description: "Sub-resources to embed, e.g. consignments.line_items.",
           },
           is_deleted: {
             type: "boolean",

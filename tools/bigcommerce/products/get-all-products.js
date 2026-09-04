@@ -23,15 +23,17 @@ const apiTool = {
               "Optional store hash. Defaults to BIGCOMMERCE_STORE_HASH.",
           },
           name: { type: "string", description: "Filter by exact product name." },
-          "name:like": {
+          keyword: {
             type: "string",
-            description: "Filter by partial product name match.",
+            description:
+              "Fuzzy search across name, SKU and description. Use this for partial-text search; there is no name:like filter.",
           },
           sku: { type: "string", description: "Filter by exact SKU." },
-          "sku:like": {
+          "sku:in": {
             type: "string",
-            description: "Filter by partial SKU match.",
+            description: "Comma-separated SKUs to include.",
           },
+          upc: { type: "string", description: "Filter by exact UPC." },
           "id:in": {
             type: "string",
             description: "Comma-separated product IDs to include.",
@@ -50,8 +52,36 @@ const apiTool = {
             type: "boolean",
             description: "Filter by storefront visibility.",
           },
-          "price:min": { type: "number", description: "Minimum price." },
-          "price:max": { type: "number", description: "Maximum price." },
+          price: {
+            type: "number",
+            description:
+              "Filter by exact price. The catalog API has no price range filter.",
+          },
+          availability: {
+            type: "string",
+            enum: ["available", "disabled", "preorder"],
+            description: "Filter by availability.",
+          },
+          is_featured: {
+            type: "boolean",
+            description: "Filter to featured products.",
+          },
+          out_of_stock: {
+            type: "boolean",
+            description: "Return only products that are out of stock.",
+          },
+          inventory_low: {
+            type: "integer",
+            description: "Set to 1 to return products at or below their low-stock warning level.",
+          },
+          "date_modified:min": {
+            type: "string",
+            description: "Earliest modification date (ISO 8601).",
+          },
+          "date_modified:max": {
+            type: "string",
+            description: "Latest modification date (ISO 8601).",
+          },
           "inventory_level:min": {
             type: "integer",
             description: "Minimum inventory level.",
